@@ -1,0 +1,159 @@
+
+<h2 class="sr-only">Графіки часу відгуку аудіо по категоріях: environment, human-screaming, speech</h2>
+
+<div style="display: flex; flex-wrap: wrap; gap: 12px; margin: 1rem 0 1.5rem;">
+  <div style="flex: 1; min-width: 140px; background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 1rem;">
+    <p style="font-size: 13px; color: var(--color-text-secondary); margin: 0 0 4px;">environment</p>
+    <p style="font-size: 22px; font-weight: 500; margin: 0; color: var(--color-text-primary);">72 мс</p>
+    <p style="font-size: 12px; color: var(--color-text-secondary); margin: 4px 0 0;">середнє · 93 зразки</p>
+  </div>
+  <div style="flex: 1; min-width: 140px; background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 1rem;">
+    <p style="font-size: 13px; color: var(--color-text-secondary); margin: 0 0 4px;">human-screaming</p>
+    <p style="font-size: 22px; font-weight: 500; margin: 0; color: var(--color-text-primary);">77 мс</p>
+    <p style="font-size: 12px; color: var(--color-text-secondary); margin: 4px 0 0;">середнє · 41 зразок</p>
+  </div>
+  <div style="flex: 1; min-width: 140px; background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 1rem;">
+    <p style="font-size: 13px; color: var(--color-text-secondary); margin: 0 0 4px;">speech</p>
+    <p style="font-size: 22px; font-weight: 500; margin: 0; color: var(--color-text-primary);">3 760 мс</p>
+    <p style="font-size: 12px; color: var(--color-text-secondary); margin: 4px 0 0;">середнє · 4 зразки</p>
+  </div>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 1rem; font-size: 12px; color: var(--color-text-secondary);">
+  <span style="display: flex; align-items: center; gap: 4px;"><span style="width: 10px; height: 10px; border-radius: 2px; background: #378ADD;"></span>environment</span>
+  <span style="display: flex; align-items: center; gap: 4px;"><span style="width: 10px; height: 10px; border-radius: 2px; background: #D4537E;"></span>human-screaming</span>
+</div>
+
+<div style="position: relative; width: 100%; height: 220px; margin-bottom: 1.5rem;">
+  <canvas id="lineChart" role="img" aria-label="Часовий ряд затримок для environment та human-screaming в мілісекундах">Затримки environment: середнє 72 мс. Затримки human-screaming: середнє 77 мс.</canvas>
+</div>
+<p style="margin: -0.8rem 0 1.2rem; font-size: 12px; color: var(--color-text-secondary);">Вісь Y: затримка в мс. Вісь X: номер зразка.</p>
+
+<div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 0.5rem; font-size: 12px; color: var(--color-text-secondary);">
+  <span style="display: flex; align-items: center; gap: 4px;"><span style="width: 10px; height: 10px; border-radius: 2px; background: #378ADD;"></span>environment</span>
+  <span style="display: flex; align-items: center; gap: 4px;"><span style="width: 10px; height: 10px; border-radius: 2px; background: #D4537E;"></span>human-screaming</span>
+  <span style="display: flex; align-items: center; gap: 4px;"><span style="width: 10px; height: 10px; border-radius: 2px; background: #639922;"></span>speech</span>
+</div>
+
+<div style="position: relative; width: 100%; height: 220px; margin-bottom: 1.5rem;">
+  <canvas id="boxChart" role="img" aria-label="Порівняльна діаграма розподілу затримок по категоріях">Min/max/avg по категоріях: environment 36-219мс, human-screaming 44-163мс, speech 3477-3956мс.</canvas>
+</div>
+<p style="margin: -0.8rem 0 1.2rem; font-size: 12px; color: var(--color-text-secondary);">Вісь Y: затримка в мс (логарифмічна шкала). Вісь X: категорія.</p>
+
+<div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 0.5rem; font-size: 12px; color: var(--color-text-secondary);">
+  <span style="display: flex; align-items: center; gap: 4px;"><span style="width: 10px; height: 10px; border-radius: 2px; background: #639922;"></span>speech</span>
+</div>
+
+<div style="position: relative; width: 100%; height: 160px;">
+  <canvas id="speechChart" role="img" aria-label="Затримки speech — 4 вимірювання від 3477 до 3956 мс">Speech latency: 4 вимірювання, середнє 3760 мс.</canvas>
+</div>
+<p style="margin: 0.5rem 0 0; font-size: 12px; color: var(--color-text-secondary);">Вісь Y: затримка в мс. Вісь X: номер вимірювання speech.</p>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+const envData = [62.218,85.689,50.415,75.254,43.09,68.713,42.414,79.318,77.267,91.949,54.249,48.491,98.628,62.344,77.987,82.725,62.915,112.387,93.142,72.87,85.597,61.872,72.613,218.879,58.565,39.323,62.41,109.121,87.362,67.673,83.025,43.247,72.452,52.325,47.931,72.62,70.046,48.859,83.586,92.099,40.54,58.428,94.113,75.021,50.735,68.361,46.986,95.117,72.098,95.797,61.055,88.124,69.792,48.11,72.643,85.068,102.849,46.191,96.566,59.068,82.756,36.456,59.328,92.736,72.312,85.82,48.889,79.314,58.997,71.702,75.449,96.136,52.5,82.325,42.717,77.676,54.668,62.815,43.04,69.914,72.81,87.121,49.298,72.554,92.066,81.438,87.596,81.453,42.317,75.487,71.763,60.805,90.874];
+const screamData = [106.151,163.395,99.195,95.923,100.522,52.168,66.586,58.974,82.889,62.449,59.366,93.22,89.151,52.417,92.322,96.671,91.946,72.926,106.448,68.441,83.671,61.715,70.361,81.413,88.906,52.379,48.948,82.993,93.948,58.868,98.623,78.606,57.837,54.806,87.998,52.415,47.606,43.971,70.369,76.208,45.278];
+const speechData = [3922.645,3477.373,3684.146,3956.224];
+
+const isDark = matchMedia('(prefers-color-scheme: dark)').matches;
+const gridColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)';
+const tickColor = isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.45)';
+const formatMs = (value, decimals = 0) => `${Number(value).toLocaleString('uk-UA', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })} мс`;
+
+const maxLen = Math.max(envData.length, screamData.length);
+const labels = Array.from({length: maxLen}, (_, i) => i + 1);
+
+new Chart(document.getElementById('lineChart'), {
+  type: 'line',
+  data: {
+    labels,
+    datasets: [
+      {
+        label: 'environment',
+        data: envData,
+        borderColor: '#378ADD',
+        backgroundColor: 'rgba(55,138,221,0.08)',
+        borderWidth: 1.5,
+        pointRadius: 0,
+        tension: 0.3,
+        fill: true,
+        borderDash: []
+      },
+      {
+        label: 'human-screaming',
+        data: screamData,
+        borderColor: '#D4537E',
+        backgroundColor: 'rgba(212,83,126,0.08)',
+        borderWidth: 1.5,
+        pointRadius: 0,
+        tension: 0.3,
+        fill: true,
+        borderDash: [4, 3]
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false, callbacks: { label: ctx => ctx.dataset.label + ': ' + formatMs(ctx.parsed.y, 1) } } },
+    scales: {
+      x: { grid: { color: gridColor }, ticks: { color: tickColor, font: { size: 11 }, maxTicksLimit: 10 }, title: { display: true, text: 'зразок #', color: tickColor, font: { size: 11 } } },
+      y: { grid: { color: gridColor }, ticks: { color: tickColor, font: { size: 11 }, callback: v => formatMs(v) }, title: { display: true, text: 'затримка (мс)', color: tickColor, font: { size: 11 } } }
+    }
+  }
+});
+
+const cats = ['environment', 'human-screaming', 'speech'];
+const colors = ['#378ADD', '#D4537E', '#639922'];
+const allData = [envData, screamData, speechData];
+const minVals = allData.map(d => Math.min(...d));
+const avgVals = allData.map(d => d.reduce((a,b)=>a+b,0)/d.length);
+const maxVals = allData.map(d => Math.max(...d));
+
+new Chart(document.getElementById('boxChart'), {
+  type: 'bar',
+  data: {
+    labels: cats,
+    datasets: [
+      { label: 'мін', data: minVals, backgroundColor: colors.map(c => c + '55'), borderColor: colors, borderWidth: 1.5, borderSkipped: false },
+      { label: 'сер', data: avgVals, backgroundColor: colors.map(c => c + 'AA'), borderColor: colors, borderWidth: 1.5, borderSkipped: false },
+      { label: 'макс', data: maxVals, backgroundColor: colors.map(c => c + 'DD'), borderColor: colors, borderWidth: 1.5, borderSkipped: false }
+    ]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': ' + formatMs(ctx.parsed.y, 1) } }
+    },
+    scales: {
+      x: { grid: { color: gridColor }, ticks: { color: tickColor, font: { size: 11 } } },
+      y: { grid: { color: gridColor }, ticks: { color: tickColor, font: { size: 11 }, callback: v => formatMs(v) }, type: 'logarithmic', title: { display: true, text: 'затримка (мс, лог. шкала)', color: tickColor, font: { size: 11 } } }
+    }
+  }
+});
+
+new Chart(document.getElementById('speechChart'), {
+  type: 'bar',
+  data: {
+    labels: ['1', '2', '3', '4'],
+    datasets: [{
+      label: 'speech',
+      data: speechData,
+      backgroundColor: '#63992255',
+      borderColor: '#639922',
+      borderWidth: 1.5
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => formatMs(ctx.parsed.y) } } },
+    scales: {
+      x: { grid: { color: gridColor }, ticks: { color: tickColor, font: { size: 11 } }, title: { display: true, text: 'зразок #', color: tickColor, font: { size: 11 } } },
+      y: { grid: { color: gridColor }, ticks: { color: tickColor, font: { size: 11 }, callback: v => formatMs(v) }, min: 3000, title: { display: true, text: 'затримка (мс)', color: tickColor, font: { size: 11 } } }
+    }
+  }
+});
+</script>

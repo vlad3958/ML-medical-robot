@@ -13,6 +13,9 @@ from keras import callbacks, layers, models
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import f1_score, recall_score
 from sklearn.utils.class_weight import compute_class_weight
+from sklearn.metrics import confusion_matrix
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 tf.get_logger().setLevel("ERROR")
 
@@ -68,7 +71,7 @@ def augment(y):
     if np.random.rand() < 0.3:
         y = y * np.random.uniform(0.8, 1.2)
     if np.random.rand() < 0.35:
-        y = librosa.effects.pitch_shift(y, sr=SR, n_steps=np.random.uniform(-2.0, 2.0))
+        y = librosa.effects.pitch_shift(y, sr=SR, n_steps=np.random.uniform(-2.0, 1.0))
     if np.random.rand() < 0.35:
         rate = np.random.uniform(0.7, 1.1)
         y = librosa.effects.time_stretch(y, rate=rate)
@@ -202,6 +205,23 @@ def load_dataset():
 def report_per_class_metrics(model, X_val, y_val):
     probs = model.predict(X_val, verbose=0)
     y_pred = np.argmax(probs, axis=1)
+    
+    cm = confusion_matrix(y_val, y_pred)
+
+    plt.figure(figsize=(6, 5))
+    sns.heatmap(
+        cm,
+        annot=True,
+        fmt="d",
+        xticklabels=LABELS,
+        yticklabels=LABELS,
+    )
+    plt.xlabel("Predicted")
+    plt.ylabel("True")
+    plt.title("Confusion Matrix")
+    plt.savefig(OUT / "confusion_matrix.png")
+    plt.show()
+    
     recalls = recall_score(y_val, y_pred, labels=np.arange(len(LABELS)), average=None, zero_division=0)
     f1s = f1_score(y_val, y_pred, labels=np.arange(len(LABELS)), average=None, zero_division=0)
     per_class = {}
@@ -213,6 +233,8 @@ def report_per_class_metrics(model, X_val, y_val):
 
 
 def save_metrics(history, val_loss, val_accuracy, per_class):
+    name_map = {"human_screaming": "distress"}
+    per_class = {name_map.get(k, k): v for k, v in per_class.items()}
     hist = history.history
     metrics = {
         "train": {
