@@ -8,9 +8,11 @@ from pathlib import Path
 
 import gradio as gr
 import librosa
+import matplotlib.pyplot as plt
 import numpy as np
 import sounddevice as sd
 import speech_recognition as sr
+import psutil
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
@@ -32,6 +34,7 @@ FRAMES = cfg["frames"]
 
 DURATION = 2.0
 BUFFER_SIZE = int(SR * DURATION)
+BLOCKSIZE = 4096
 
 ASR_LANGS = ("uk-UA",)
 ASR_START_SPEECH_PROB = 0.68
@@ -49,6 +52,7 @@ asr_queue = queue.Queue(maxsize=1)
 asr_result_queue = queue.Queue(maxsize=1)
 history = []
 MAX_LATENCY_POINTS = 800
+MAX_RESOURCE_POINTS = 800
 
 state = {
     "running": False,
@@ -59,6 +63,10 @@ state = {
     "speech_text": "Waiting for speech...",
     "speech_pending_input_ts": None,
     "probs": {label: 0.0 for label in labels},
+    "pipeline_latency_ms": None,
+    "pipeline_latency_history": [],
+    "resource_history": [],
+    "start_ts": None,
     "latency_ms": {
         "environment": None,
         "human-screaming": None,
@@ -83,6 +91,7 @@ ui_cache = {
     "saved_report": "",
     "runtime": "Stopped",
 }
+process = psutil.Process(os.getpid())
 
 
 def normalize_output_key(pred_label):
@@ -105,6 +114,25 @@ def append_latency_unlocked(stream_key, value_ms):
     stream_history.append(value_ms)
     if len(stream_history) > MAX_LATENCY_POINTS:
         del stream_history[:-MAX_LATENCY_POINTS]
+
+
+def append_pipeline_latency_unlocked(value_ms):
+    state["pipeline_latency_ms"] = value_ms
+    history = state["pipeline_latency_history"]
+    history.append(value_ms)
+    if len(history) > MAX_LATENCY_POINTS:
+        del history[:-MAX_LATENCY_POINTS]
+
+
+def append_resource_usage_unlocked(timestamp_s, cpu_percent, rss_mb):
+    history = state["resource_history"]
+    history.append({
+        "t": round(timestamp_s, 3),
+        "cpu_percent": round(float(cpu_percent), 3),
+        "rss_mb": round(float(rss_mb), 3),
+    })
+    if len(history) > MAX_RESOURCE_POINTS:
+        del history[:-MAX_RESOURCE_POINTS]
 
 
 def build_avg_text(latency_history):
@@ -141,8 +169,12 @@ def build_latency_report_payload(latency_history):
     return {
         "saved_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "sample_rate": SR,
+        "duration_sec": DURATION,
+        "blocksize": BLOCKSIZE,
         "metrics": {
             "latency_history_ms": latency_history,
+            "pipeline_latency_ms": [],
+            "resource_usage": [],
             "summary": summary,
         },
     }
@@ -154,22 +186,67 @@ def save_latency_report():
             key: [round(float(v), 3) for v in values]
             for key, values in state["latency_history"].items()
         }
+        pipeline_latency = [round(float(v), 3) for v in state["pipeline_latency_history"]]
+        resource_history = list(state["resource_history"])
 
     has_data = any(latency_history[key] for key in latency_history)
-    if not has_data:
+    if not has_data and not pipeline_latency and not resource_history:
         return None
 
     payload = build_latency_report_payload(latency_history)
+    payload["metrics"]["pipeline_latency_ms"] = pipeline_latency
+    payload["metrics"]["resource_usage"] = resource_history
     LATENCY_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
 
     ts = time.strftime("%Y%m%d_%H%M%S")
-    report_path = LATENCY_EXPORT_DIR / f"latency_report_{ts}.json"
+    report_path = LATENCY_EXPORT_DIR / f"latency_report_{BLOCKSIZE}_{ts}.json"
     latest_path = LATENCY_EXPORT_DIR / "latency_report_latest.json"
 
     text = json.dumps(payload, ensure_ascii=False, indent=2)
     report_path.write_text(text, encoding="utf-8")
     latest_path.write_text(text, encoding="utf-8")
     return str(report_path)
+
+
+def save_latency_plots():
+    with state_lock:
+        pipeline_latency = list(state["pipeline_latency_history"])
+        resource_history = list(state["resource_history"])
+        start_ts = state["start_ts"]
+
+    LATENCY_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+
+    if pipeline_latency:
+        plt.figure(figsize=(7, 4))
+        plt.plot(pipeline_latency, color="#1D9E75")
+        plt.title(f"Pipeline latency (blocksize={BLOCKSIZE})")
+        plt.ylabel("ms")
+        plt.xlabel("sample index")
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        plt.savefig(LATENCY_EXPORT_DIR / f"pipeline_latency_{BLOCKSIZE}.png", dpi=150)
+        plt.close()
+
+    if resource_history and start_ts is not None:
+        t = [item["t"] for item in resource_history]
+        cpu = [item["cpu_percent"] for item in resource_history]
+        rss = [item["rss_mb"] for item in resource_history]
+
+        fig, ax1 = plt.subplots(figsize=(7, 4))
+        ax1.plot(t, cpu, color="#378ADD", label="CPU %")
+        ax1.set_xlabel("time (s)")
+        ax1.set_ylabel("CPU %", color="#378ADD")
+        ax1.tick_params(axis="y", labelcolor="#378ADD")
+
+        ax2 = ax1.twinx()
+        ax2.plot(t, rss, color="#D85A30", label="RSS MB")
+        ax2.set_ylabel("RSS (MB)", color="#D85A30")
+        ax2.tick_params(axis="y", labelcolor="#D85A30")
+
+        fig.suptitle(f"Resource usage (blocksize={BLOCKSIZE})")
+        fig.tight_layout()
+        fig.savefig(LATENCY_EXPORT_DIR / f"resource_usage_{BLOCKSIZE}.png", dpi=150)
+        plt.close(fig)
 
 
 def preprocess(y):
@@ -282,7 +359,7 @@ def inference_worker():
         channels=1,
         dtype="float32",
         callback=audio_callback,
-        blocksize=1024,
+        blocksize=BLOCKSIZE,
     ):
         while not stop_event.is_set():
             try:
@@ -297,6 +374,11 @@ def inference_worker():
             y = audio_buffer / (np.max(np.abs(audio_buffer)) + 1e-6)
             probs = model.predict(preprocess(y), verbose=0)[0]
             probs = smooth(probs)
+
+            output_ts = time.perf_counter()
+            pipeline_latency_ms = max(0.0, (output_ts - input_ts) * 1000.0)
+            with state_lock:
+                append_pipeline_latency_unlocked(pipeline_latency_ms)
 
             pred_idx = int(np.argmax(probs))
             pred_label = labels[pred_idx]
@@ -361,6 +443,8 @@ def start_runtime():
     stop_event.clear()
     history.clear()
 
+    process.cpu_percent(interval=None)
+
     with state_lock:
         state["running"] = True
         state["status"] = "Starting microphone stream..."
@@ -370,6 +454,10 @@ def start_runtime():
         state["top_conf"] = 0.0
         state["top_input_ts"] = None
         state["probs"] = {label: 0.0 for label in labels}
+        state["pipeline_latency_ms"] = None
+        state["pipeline_latency_history"] = []
+        state["resource_history"] = []
+        state["start_ts"] = time.perf_counter()
         state["latency_ms"] = {
             "environment": None,
             "human-screaming": None,
@@ -392,6 +480,7 @@ def stop_runtime():
 
     stop_event.set()
     report_path = save_latency_report()
+    save_latency_plots()
     with state_lock:
         state["running"] = False
         state["status"] = "Stopped"
@@ -403,6 +492,7 @@ def stop_runtime():
 def save_latency_report_on_exit():
     try:
         save_latency_report()
+        save_latency_plots()
     except Exception:
         pass
 
@@ -424,6 +514,12 @@ def poll_ui():
             key: list(values)
             for key, values in state["latency_history"].items()
         }
+
+        if running and state["start_ts"] is not None:
+            cpu_percent = process.cpu_percent(interval=None)
+            rss_mb = process.memory_info().rss / (1024 * 1024)
+            rel_t = now - state["start_ts"]
+            append_resource_usage_unlocked(rel_t, cpu_percent, rss_mb)
 
         if top_input_ts is not None:
             output_key = normalize_output_key(top_label)
