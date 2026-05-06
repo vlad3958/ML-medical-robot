@@ -25,6 +25,8 @@ LABELS_PATH = ROOT / "artifacts/models/labels_transformer.json"
 CFG_PATH = ROOT / "artifacts/models/cfg_transformer.json"
 LATENCY_EXPORT_DIR = ROOT / "artifacts" / "latency"
 
+SAVE_REPORTS = False
+
 model = load_model(MODEL_PATH)
 labels = json.loads(LABELS_PATH.read_text(encoding="utf-8"))
 cfg = json.loads(CFG_PATH.read_text(encoding="utf-8"))
@@ -34,11 +36,11 @@ FRAMES = cfg["frames"]
 
 DURATION = 2.0
 BUFFER_SIZE = int(SR * DURATION)
-BLOCKSIZE = 2048
+BLOCKSIZE = 1024
 
 ASR_LANGS = ("uk-UA",)
 ASR_START_SPEECH_PROB = 0.68
-ASR_END_SILENCE_SEC = 0.9
+ASR_END_SILENCE_SEC = 1.0
 ASR_MIN_UTTERANCE_SEC = 1.2
 ASR_MAX_UTTERANCE_SEC = 20.0
 ASR_PRE_SPEECH_SEC = 1.0
@@ -476,17 +478,23 @@ def stop_runtime():
         return "Stopped"
 
     stop_event.set()
-    report_path = save_latency_report()
-    save_latency_plots()
+    report_path = None
+    if SAVE_REPORTS:
+        report_path = save_latency_report()
+        save_latency_plots()
     with state_lock:
         state["running"] = False
         state["status"] = "Stopped"
     if report_path:
         return f"Stopped | saved: {report_path}"
+    if not SAVE_REPORTS:
+        return "Stopped | reports disabled"
     return "Stopped"
 
 
 def save_latency_report_on_exit():
+    if not SAVE_REPORTS:
+        return
     try:
         save_latency_report()
         save_latency_plots()

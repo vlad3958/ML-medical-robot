@@ -1,6 +1,9 @@
 import os
 import json
 import sys
+import shutil
+import subprocess
+import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -15,11 +18,12 @@ from keras.models import load_model
 
 ROOT = Path(__file__).resolve().parents[1]
 
-MODEL_PATH = ROOT / "artifacts/models/model.keras"
-LABELS_PATH = ROOT / "artifacts/models/labels.json"
-CFG_PATH = ROOT / "artifacts/models/cfg.json"
+MODEL_PATH = ROOT / "artifacts/models/model_transformer.keras"
+LABELS_PATH = ROOT / "artifacts/models/labels_transformer.json"
+CFG_PATH = ROOT / "artifacts/models/cfg_transformer.json"
 
 ASR_LANGS = ("uk-UA",)
+STEP_MS = 128
 
 
 def transcribe_audio(y, sr_hz):
@@ -53,7 +57,7 @@ def preprocess_windows(y, cfg):
     mel = np.clip(mel, 0.0, 1.0)
 
     frames = cfg["frames"]
-    step = frames // 2
+    step = max(1, int(round((STEP_MS / 1000.0) * cfg["sr"] / cfg["hop"])))
 
     windows = []
 
@@ -66,13 +70,46 @@ def preprocess_windows(y, cfg):
     return np.array(windows)[..., None]
 
 
+def load_audio(path, cfg):
+    try:
+        y, _ = librosa.load(path, sr=cfg["sr"], mono=True)
+        return y
+    except Exception as exc:
+        ffmpeg = shutil.which("ffmpeg")
+        if not ffmpeg:
+            raise RuntimeError(
+                "Failed to read audio. Install ffmpeg or re-encode the file to WAV."
+            ) from exc
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            wav_path = Path(tmpdir) / "decoded.wav"
+            cmd = [
+                ffmpeg,
+                "-y",
+                "-i",
+                str(path),
+                "-ac",
+                "1",
+                "-ar",
+                str(cfg["sr"]),
+                str(wav_path),
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode != 0:
+                raise RuntimeError(
+                    f"ffmpeg decode failed: {result.stderr.strip()}"
+                ) from exc
+            y, _ = librosa.load(wav_path, sr=cfg["sr"], mono=True)
+            return y
+
+
 def main(path):
     labels = json.loads(LABELS_PATH.read_text(encoding="utf-8"))
     cfg = json.loads(CFG_PATH.read_text(encoding="utf-8"))
 
     model = load_model(MODEL_PATH)
 
-    y, _ = librosa.load(path, sr=cfg["sr"], mono=True)
+    y = load_audio(path, cfg)
     y = y / (np.max(np.abs(y)) + 1e-6)
 
     x = preprocess_windows(y, cfg)
