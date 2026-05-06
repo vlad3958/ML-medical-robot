@@ -20,9 +20,9 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 from keras.models import load_model
 
 ROOT = Path(__file__).resolve().parents[1]
-MODEL_PATH = ROOT / "artifacts/models/model.keras"
-LABELS_PATH = ROOT / "artifacts/models/labels.json"
-CFG_PATH = ROOT / "artifacts/models/cfg.json"
+MODEL_PATH = ROOT / "artifacts/models/model_transformer.keras"
+LABELS_PATH = ROOT / "artifacts/models/labels_transformer.json"
+CFG_PATH = ROOT / "artifacts/models/cfg_transformer.json"
 LATENCY_EXPORT_DIR = ROOT / "artifacts" / "latency"
 
 model = load_model(MODEL_PATH)
@@ -34,7 +34,7 @@ FRAMES = cfg["frames"]
 
 DURATION = 2.0
 BUFFER_SIZE = int(SR * DURATION)
-BLOCKSIZE = 4096
+BLOCKSIZE = 2048
 
 ASR_LANGS = ("uk-UA",)
 ASR_START_SPEECH_PROB = 0.68
@@ -147,24 +147,21 @@ def build_avg_text(latency_history):
     return "\n".join(lines)
 
 
-def build_latency_report_payload(latency_history):
-    summary = {}
-    for stream_key in ("environment", "human-screaming", "speech"):
-        series = latency_history.get(stream_key, [])
-        if series:
-            summary[stream_key] = {
-                "count": len(series),
-                "avg_ms": round(float(np.mean(series)), 3),
-                "min_ms": round(float(np.min(series)), 3),
-                "max_ms": round(float(np.max(series)), 3),
-            }
-        else:
-            summary[stream_key] = {
-                "count": 0,
-                "avg_ms": None,
-                "min_ms": None,
-                "max_ms": None,
-            }
+def build_latency_report_payload(pipeline_latency):
+    if pipeline_latency:
+        summary = {
+            "count": len(pipeline_latency),
+            "avg_ms": round(float(np.mean(pipeline_latency)), 3),
+            "min_ms": round(float(np.min(pipeline_latency)), 3),
+            "max_ms": round(float(np.max(pipeline_latency)), 3),
+        }
+    else:
+        summary = {
+            "count": 0,
+            "avg_ms": None,
+            "min_ms": None,
+            "max_ms": None,
+        }
 
     return {
         "saved_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
@@ -172,35 +169,30 @@ def build_latency_report_payload(latency_history):
         "duration_sec": DURATION,
         "blocksize": BLOCKSIZE,
         "metrics": {
-            "latency_history_ms": latency_history,
-            "pipeline_latency_ms": [],
+            "pipeline_latency_ms": pipeline_latency,
             "resource_usage": [],
-            "summary": summary,
+            "summary": {
+                "pipeline_latency_ms": summary,
+            },
         },
     }
 
 
 def save_latency_report():
     with state_lock:
-        latency_history = {
-            key: [round(float(v), 3) for v in values]
-            for key, values in state["latency_history"].items()
-        }
         pipeline_latency = [round(float(v), 3) for v in state["pipeline_latency_history"]]
         resource_history = list(state["resource_history"])
 
-    has_data = any(latency_history[key] for key in latency_history)
-    if not has_data and not pipeline_latency and not resource_history:
+    if not pipeline_latency and not resource_history:
         return None
 
-    payload = build_latency_report_payload(latency_history)
-    payload["metrics"]["pipeline_latency_ms"] = pipeline_latency
+    payload = build_latency_report_payload(pipeline_latency)
     payload["metrics"]["resource_usage"] = resource_history
     LATENCY_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
 
     ts = time.strftime("%Y%m%d_%H%M%S")
-    report_path = LATENCY_EXPORT_DIR / f"latency_report_{BLOCKSIZE}_{ts}.json"
-    latest_path = LATENCY_EXPORT_DIR / "latency_report_latest.json"
+    report_path = LATENCY_EXPORT_DIR / f"latency_report_transformer_{BLOCKSIZE}_{ts}.json"
+    latest_path = LATENCY_EXPORT_DIR / "latency_report_transformer_latest.json"
 
     text = json.dumps(payload, ensure_ascii=False, indent=2)
     report_path.write_text(text, encoding="utf-8")
@@ -217,14 +209,19 @@ def save_latency_plots():
     LATENCY_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
 
     if pipeline_latency:
+        t = np.arange(len(pipeline_latency)) * (BLOCKSIZE / SR)
+        max_latency = float(np.max(pipeline_latency))
+        y_max = max(200.0, max_latency * 1.1)
         plt.figure(figsize=(7, 4))
-        plt.plot(pipeline_latency, color="#1D9E75")
-        plt.title(f"Pipeline latency (blocksize={BLOCKSIZE})")
+        plt.plot(t, pipeline_latency, color="#1D9E75")
+        block_ms = int(round(BLOCKSIZE * 1000 / SR))
+        plt.title(f"Pipeline latency (block={block_ms} ms)")
         plt.ylabel("ms")
-        plt.xlabel("sample index")
+        plt.xlabel("time (s)")
+        plt.ylim(0, y_max)
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
-        plt.savefig(LATENCY_EXPORT_DIR / f"pipeline_latency_{BLOCKSIZE}.png", dpi=150)
+        plt.savefig(LATENCY_EXPORT_DIR / f"pipeline_latency_transformer_{BLOCKSIZE}.png", dpi=150)
         plt.close()
 
     if resource_history and start_ts is not None:
@@ -245,7 +242,7 @@ def save_latency_plots():
 
         fig.suptitle(f"Resource usage (blocksize={BLOCKSIZE})")
         fig.tight_layout()
-        fig.savefig(LATENCY_EXPORT_DIR / f"resource_usage_{BLOCKSIZE}.png", dpi=150)
+        fig.savefig(LATENCY_EXPORT_DIR / f"resource_usage_transformer_{BLOCKSIZE}.png", dpi=150)
         plt.close(fig)
 
 
