@@ -20,9 +20,9 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 from keras.models import load_model
 
 ROOT = Path(__file__).resolve().parents[1]
-MODEL_PATH = ROOT / "artifacts/models/model.keras"
+MODEL_PATH = ROOT / "artifacts/models/model_4.0s.keras"
 LABELS_PATH = ROOT / "artifacts/models/labels.json"
-CFG_PATH = ROOT / "artifacts/models/cfg.json"
+CFG_PATH = ROOT / "artifacts/models/cfg_4s.json"
 LATENCY_EXPORT_DIR = ROOT / "artifacts" / "latency"
 
 SAVE_REPORTS = False
@@ -34,9 +34,9 @@ cfg = json.loads(CFG_PATH.read_text(encoding="utf-8"))
 SR = cfg["sr"]
 FRAMES = cfg["frames"]
 
-DURATION = 2.0
+DURATION = 4.0
 BUFFER_SIZE = int(SR * DURATION)
-BLOCKSIZE = 2048
+BLOCKSIZE = 1024
 
 ASR_LANGS = ("uk-UA",)
 ASR_START_SPEECH_PROB = 0.68
@@ -193,8 +193,8 @@ def save_latency_report():
     LATENCY_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
 
     ts = time.strftime("%Y%m%d_%H%M%S")
-    report_path = LATENCY_EXPORT_DIR / f"latency_report_cnn_{BLOCKSIZE}_{ts}.json"
-    latest_path = LATENCY_EXPORT_DIR / "latency_report_cnn_latest.json"
+    report_path = LATENCY_EXPORT_DIR / f"4.0s_latency_report_cnn_{BLOCKSIZE}_{ts}.json"
+    latest_path = LATENCY_EXPORT_DIR / "4.0s_latency_report_cnn_latest.json"
 
     text = json.dumps(payload, ensure_ascii=False, indent=2)
     report_path.write_text(text, encoding="utf-8")
@@ -223,7 +223,7 @@ def save_latency_plots():
         plt.ylim(0, y_max)
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
-        plt.savefig(LATENCY_EXPORT_DIR / f"pipeline_latency_cnn_{BLOCKSIZE}.png", dpi=150)
+        plt.savefig(LATENCY_EXPORT_DIR / f"4.0s_pipeline_latency_cnn_{BLOCKSIZE}.png", dpi=150)
         plt.close()
 
     if resource_history and start_ts is not None:
@@ -244,7 +244,7 @@ def save_latency_plots():
 
         fig.suptitle(f"Resource usage (blocksize={BLOCKSIZE})")
         fig.tight_layout()
-        fig.savefig(LATENCY_EXPORT_DIR / f"resource_usage_cnn_{BLOCKSIZE}.png", dpi=150)
+        fig.savefig(LATENCY_EXPORT_DIR / f"4.0s_resource_usage_cnn_{BLOCKSIZE}.png", dpi=150)
         plt.close(fig)
 
 

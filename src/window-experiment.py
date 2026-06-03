@@ -325,7 +325,7 @@ def plot_latency(results: dict):
 
 def plot_confusion(y_true, y_pred, duration: float):
     cm = confusion_matrix(y_true, y_pred)
-    short_labels = ["env", "speech", "scream"]
+    short_labels = ["env", "speech", "distress"]
     plt.figure(figsize=(5, 4))
     sns.heatmap(cm, annot=True, fmt="d",
                 xticklabels=short_labels, yticklabels=short_labels,

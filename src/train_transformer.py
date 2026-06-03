@@ -274,18 +274,18 @@ def transformer_block(x, num_heads: int, key_dim: int, ff_dim: int, dropout: flo
 def build_model():
     inp = layers.Input((FRAMES, N_MELS))
 
-    x = layers.Dense(128, activation="relu")(inp)
+    x = layers.Dense(96, activation="relu")(inp)
     x = layers.LayerNormalization(epsilon=1e-6)(x)
 
     pos = positional_encoding(FRAMES, int(x.shape[-1]))
     x = x + pos
 
-    x = transformer_block(x, num_heads=4, key_dim=32, ff_dim=256, dropout=0.2)
-    x = transformer_block(x, num_heads=4, key_dim=32, ff_dim=256, dropout=0.2)
+    x = transformer_block(x, num_heads=2, key_dim=20, ff_dim=160, dropout=0.2)
+    x = transformer_block(x, num_heads=2, key_dim=20, ff_dim=160, dropout=0.2)
 
     x = layers.GlobalAveragePooling1D()(x)
     x = layers.Dropout(0.3)(x)
-    x = layers.Dense(96, activation="relu")(x)
+    x = layers.Dense(80, activation="relu")(x)
     x = layers.Dropout(0.3)(x)
     out = layers.Dense(len(LABELS), activation="softmax")(x)
 
